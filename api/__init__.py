@@ -165,7 +165,7 @@ def train(**args):
         Enable_MLFLOW = args["Enable_MLFLOW"]
         settings.update(
             {
-                "mlflow": False,
+                "mlflow": args["Enable_MLFLOW"],
                 "datasets_dir": config.DATA_PATH,
                 "model_dir": config.MODELS_PATH,
             }
@@ -231,6 +231,7 @@ def train(**args):
             num_epochs = args["epochs"]
             model.train(exist_ok=True, device=device, **args)
 
+          
             # Call the mlflow_logging function for MLflow-related operations
             return mlflow_logging(model, num_epochs, args)
         else:

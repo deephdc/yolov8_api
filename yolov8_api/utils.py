@@ -129,6 +129,7 @@ def get_git_info():
 def mlflow_update():
 
     # check the latest version of the model
+
     model_version_infos = client.search_model_versions(
         f"name = '{config.MLFLOW_MODEL_NAME}'"
     )
@@ -199,33 +200,49 @@ def mlflow_update():
         stage="Archived",
     )
 
+def get_run_id_by_name(experiment_name, run_name):
+    client = mlflow.tracking.MlflowClient()
+    experiment = client.get_experiment_by_name(experiment_name)
+    if experiment:
+        runs = client.search_runs(experiment_ids=[experiment.experiment_id],
+         filter_string=f"tags.mlflow.runName = '{run_name}'")
+        if runs:
+            return runs[0].info.run_id
+    return None
+
 
 def mlflow_logging(model, num_epochs, args):
+   
+    experiment_name= os.getenv(
+        "MLFLOW_EXPERIMENT_NAME", default="yolov8"
+    )
     mlflow.end_run()  # stop any previous active mlflow run
     # mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 
-    metrics = {}
+    run_id = get_run_id_by_name(experiment_name, args["name"])
+    print("run_id", run_id)
 
-    with mlflow.start_run(run_name=args["name"], nested=True):
+    with mlflow.start_run(run_id=run_id, nested=True) as run:
+         
         artifact_uri = mlflow.get_artifact_uri()
-        results = os.path.join(
-            args["project"], args["name"], "results.csv"
-        )
-        with open(results, mode="r") as file:
+       # results = os.path.join(
+        #    args["project"], args["name"], "results.csv"
+        #)
+       # with open(results, mode="r") as file:
 
-            reader = csv.DictReader(file)
-            for row in reader:
-                for key, value in row.items():
-                    key = key.strip()
-                    key = key.strip().replace("(B)", "")
-                    if key not in metrics:
-                        metrics[key] = []
-                    metrics[key].append(float(value))
-        metrics.pop("epoch", None)
+        #    reader = csv.DictReader(file)
+        #    for row in reader:
+        #        for key, value in row.items():
+        #            key = key.strip()
+        #            key = key.strip().replace("(B)", "")
+        #            if key not in metrics:
+        ##                metrics[key] = []
+         #           metrics[key].append(float(value))
+       # metrics.pop("epoch", None)
         # logs metrics in mlflow
-        for metric_name, metric_values in metrics.items():
-            for step, value in enumerate(metric_values, start=1):
-                mlflow.log_metric(metric_name, value, step=step)
+       # for metric_name, metric_values in metrics.items():
+        #    for step, value in enumerate(metric_values, start=1):
+        #        mlflow.log_metric(metric_name, value, step=step)
 
         # Assuming config.DATA_PATH contains the directory where
         #  data.yaml is located
@@ -234,7 +251,7 @@ def mlflow_logging(model, num_epochs, args):
             data = yaml.safe_load(yaml_file)
 
         # Use mlflow.log_artifact to log the contents of data.yaml
-        mlflow.log_artifact(data_file_path, artifact_path="artifacts")
+        mlflow.log_artifact(data_file_path)
 
         # Log the Dataset
         # Print OpenCV version for debugging
@@ -287,14 +304,14 @@ def mlflow_logging(model, num_epochs, args):
         # Log the Dataset entity as input
         mlflow.log_input(dataset_entity, context="training")
 
-        run, active_run = mlflow, mlflow.active_run()
-        print("active run id", active_run.info.run_id)
+        #run, active_run = mlflow, mlflow.active_run()
+        #print("active run id", active_run.info.run_id)
 
-        # logs params in mlflow
+        # logs more params in mlflow
         git_repo, version = get_git_info()
         git_info = {"git_repo": git_repo, "git_version": version}
-        merged_params = {**vars(model.trainer.model.args), **git_info}
-        run.log_params(merged_params)
+        #merged_params = {**vars(model.trainer.model.args), **git_info}
+        mlflow.log_params(git_info)
 
         # Assuming model is an instance of YOLO and img is an input image
         prediction_inf = model(img)
@@ -370,7 +387,7 @@ def mlflow_logging(model, num_epochs, args):
 
         # Use mlflow.log_artifact to log the contents of the detection_results
         mlflow.log_artifact(
-            output_file_path, artifact_path="artifacts"
+            output_file_path
         )
 
         # Use infer_signature with train_inf and results_all
@@ -390,11 +407,11 @@ def mlflow_logging(model, num_epochs, args):
         )
 
         # Log additional artifacts
-        mlflow.log_artifacts(
-            str(model.trainer.save_dir), artifact_path="artifacts"
-        )
+       # mlflow.log_artifacts(
+        #    str(model.trainer.save_dir), artifact_path="artifacts"
+        #)
 
-        run_id = active_run.info.run_id
+       # run_id = active_run.info.run_id
         model_uri = mlflow.get_artifact_uri("artifacts")
         print("model url is ", model_uri)
 
